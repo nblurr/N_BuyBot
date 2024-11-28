@@ -4,6 +4,7 @@ import { ethers, JsonRpcProvider } from 'ethers';
 import { Telegraf } from 'telegraf';
 import BigNumber from 'bignumber.js';
 import { appendFile } from 'fs/promises';
+import { readFile } from 'fs/promises';
 
 // Initialize WebSocket provider
 const provider = new ethers.WebSocketProvider(process.env.QUICKNODE_RPC_WSS);
@@ -35,8 +36,8 @@ const pool_ABI = [
 // Initialize Telegram bot
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-function flipSign(number) {
-  return -number;
+function removeSign(number) {
+  return Math.abs(number);
 }
 
 async function writeJsonToFile(obj, filename) {
@@ -56,13 +57,23 @@ async function readJsonFileToObj(filename) {
       const content = await readFile(filename, 'utf-8');
       const lines = content.trim().split('\n'); // Split by lines for multiple JSON objects
       const obj = lines.map((line) => JSON.parse(line)); // Parse each line as JSON
-      return obj;
+      return obj[0];
   } catch (err) {
       console.error('Error reading file:', err);
   }
 }
 
+async function testNWETH(){
+  try {
+    const details = await readJsonFileToObj("details_NWETH.json");
 
+    details.price = (details.price * 2).toFixed(2);
+
+    await processDetails(details);
+  } catch (error) {
+    console.error("Error processing Swap event:", error);
+  }
+}
 
 // Track swaps
 async function trackSwaps() {
@@ -76,7 +87,7 @@ async function trackSwaps() {
         try {
           const sqrtPriceX96Big = new BigNumber(sqrtPriceX96.toString()); // Ensure it's a BigNumber
           const Q96 = new BigNumber(2).pow(96);
-          const sqrtPrice = sqrtPriceX96Big.div(Q96); // Scale down
+          const sqrtPrice = sqrtPriceX96.div(Q96).pow(2).toFixed(2); // Scale down
           const txHash = event.log.transactionHash
           const tx = await provider.getTransaction(txHash);
 
@@ -84,8 +95,8 @@ async function trackSwaps() {
             pool,
             sender,
             recipient,
-            t0: flipSign(ethers.formatUnits(amount0, 18)).toFixed(2),
-            t1: flipSign(ethers.formatUnits(amount1, 18)).toFixed(2),
+            t0: removeSign(ethers.formatUnits(amount0, 18)).toFixed(2),
+            t1: removeSign(ethers.formatUnits(amount1, 18)).toFixed(2),
             price: sqrtPrice.toString(),
             sqrtPriceX96: sqrtPriceX96.toString(),
             liquidity: liquidity.toString(),
@@ -97,65 +108,8 @@ async function trackSwaps() {
           };
 
           writeJsonToFile(details, 'details.json');
-          var $msg = '';
 
-          var $vid = "https://nblurr.com/wp-content/uploads/2024/11/NEW-BUY.mp4"
-
-          bot.sendVideo(process.env.TG_CHANNEL, $vid, {})
-          .then(() => console.log("Video sent!"))
-          .catch(console.error);
-          
-          if(pool == "0x5121f6d8954fc6086649b826026739881a8f80c2"){
-
-            // RFD/N
-            if(details.t0>0) {
-              $msg =`💸💸 N/RFD 💸💸
-
-🤵‍♂️ Sender: ${details.from}
-🤵‍♂️ Recipient: ${details.to}
-💱 Swap N: ${details.t1}
-💱 For RFD: ${details.t0}
-💵 Price (USD) - ## To fix ##: ${details.price}
-🔍 Transaction Hash: https://etherscan.io/tx/${txHash}
-              `;
-            } else {
-              $msg =`💸💸 N/RFD 💸💸
-
-🤵‍♂️ Sender: ${details.from}
-🤵‍♂️ Recipient: ${details.to}
-💱 Swap RFD: ${details.t0}
-💱 For N: ${details.t1}
-💵 Price (USD) - ## To fix ##: ${details.price}
-🔍 Transaction Hash: ${txHash}
-              `;
-            }
-
-          } else if(pool == "0x90e7a93e0a6514cb0c84fc7acc1cb5c0793352d2") {
-            // N/ETH
-            if(details.t0>0) {
-              $msg =`💸💸 N/ETH 💸💸
-
-🤵‍♂️ Sender: ${details.from}
-🤵‍♂️ Recipient: ${details.to}
-💱 Swap N: ${details.t1}
-💱 For ETH: ${details.t0}
-💵 Price (USD) - ## To fix ##: ${details.price}
-🔍 Transaction Hash: ${txHash}
-              `;
-            } else {
-              $msg =`💸💸 N/ETH 💸💸
-
-🤵‍♂️ Sender: ${details.from}
-🤵‍♂️ Recipient: ${details.to}
-💱 Swap ETH: ${details.t0}
-💱 For N: ${details.t1}
-💵 Price (USD) - ## To fix ##: ${details.price}
-🔍 Transaction Hash: ${txHash}
-              `;
-            }
-          }
-
-          await postToTelegram($msg);
+          processDetails(details);
         } catch (error) {
           console.error("Error processing Swap event:", error);
         }
@@ -164,10 +118,74 @@ async function trackSwaps() {
   }
 }
 
+async function processDetails(details){
+  var $msg = '';
+
+  var $vid = "https://nblurr.com/wp-content/uploads/2024/11/NEW-BUY.mp4"
+
+  
+  await bot.telegram.sendVideo(process.env.TG_CHANNEL, $vid, {})
+  .then()
+  .catch(console.error);
+  
+  if(details.pool == "0x5121f6d8954fc6086649b826026739881a8f80c2"){
+
+    // RFD/N
+    if(details.t0>0) {
+      $msg =`💸💸 N/RFD 💸💸
+
+🤵‍♂️ From: <a href='https://etherscan.io/address/${details.from}'>details.from</a>
+🤵‍♂️ To: <a href='https://etherscan.io/address/${details.to}'>details.to</a>
+💱 Swapped N: ${details.t1}
+💱 Got RFD: ${details.t0}
+💵 Price (USD) - : ${details.price}
+🔍 <a href='https://etherscan.io/tx/${details.txHash}'>TX</a>
+      `;
+    } else {
+      $msg =`💸💸 N/RFD 💸💸
+
+🤵‍♂️ From: <a href='https://etherscan.io/address/${details.from}'>details.from</a>
+🤵‍♂️ To: <a href='https://etherscan.io/address/${details.to}'>details.to</a>
+💱 Swapped RFD: ${details.t0}
+💱 Received N: ${details.t1}
+💵 Price (USD) : ${details.price}
+🔍 <a href='https://etherscan.io/tx/${details.txHash}'>TX</a>
+      `;
+    }
+
+  } else if(details.pool == "0x90e7a93e0a6514cb0c84fc7acc1cb5c0793352d2") {
+    // N/ETH
+    if(details.t0>0) {
+      $msg =`💸💸 N/ETH 💸💸
+
+🤵‍♂️ From: <a href='https://etherscan.io/address/${details.from}'>${details.from}</a>
+🤵‍♂️ To: <a href='https://etherscan.io/address/${details.to}'>${details.to}</a>
+💱 Swapped N: ${details.t1}
+💱 Received ETH: ${details.t0}
+💵 Price (USD) : ${details.price}
+🔍 <a href='https://etherscan.io/tx/${details.txHash}'>TX</a>
+      `;
+    } else {
+      $msg =`💸💸 N/ETH 💸💸
+
+🤵‍♂️ From: <a href='https://etherscan.io/address/${details.from}'>${details.from}</a>
+🤵‍♂️ To: <a href='https://etherscan.io/address/${details.to}'>${details.to}<a>
+💱 Swapped ETH: ${details.t0}
+💱 Received N: ${details.t1}
+💵 Price (USD) : ${details.price}
+🔍 <a href='https://etherscan.io/tx/${details.txHash}'>TX</a>
+      `;
+    }
+  }
+
+  await postToTelegram($msg);
+
+}
+
 // Post swap information to Telegram
 async function postToTelegram(msg) {
   try {
-    await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
+    await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg, { parse_mode: "HTML" , disable_web_page_preview: true});
   } catch (error) {
     console.error("Error sending message to Telegram:", error);
   }
@@ -181,18 +199,8 @@ async function postToTelegram(msg) {
     var msg = "Starting Telegram bot...";
     console.log(msg);
 
+    await testNWETH(); 
     await trackSwaps();
-
-
-    /*
-    var msg = "Starting Telegram bot...";
-    console.log(msg);
-    await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
-
-    msg = "Bot is live!";
-    console.log(msg);
-    await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
-    */
 
   } catch (error) {
     console.error("Error starting bot:", error);
