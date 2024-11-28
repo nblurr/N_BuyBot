@@ -82,7 +82,7 @@ async function trackSwaps() {
                 Recipient: ${details.to}
                 Swap N: ${details.t1}
                 For RFD: ${details.t0}
-                Price (USD) - ## À corriger ##: ${details.price}
+                Price (USD) - ## To fix ##: ${details.price}
                 Transaction Hash: ${txHash}
               `;
             } else {
@@ -92,7 +92,7 @@ async function trackSwaps() {
                 Recipient: ${details.to}
                 Swap RFD: ${details.t0}
                 For N: ${details.t1}
-                Price (USD) - ## À corriger ##: ${details.price}
+                Price (USD) - ## To fix ##: ${details.price}
                 Transaction Hash: ${txHash}
               `;
             }
@@ -106,7 +106,7 @@ async function trackSwaps() {
                 Recipient: ${details.to}
                 Swap N: ${details.t1}
                 For ETH: ${details.t0}
-                Price (USD) - ## À corriger ##: ${details.price}
+                Price (USD) - ## To fix ##: ${details.price}
                 Transaction Hash: ${txHash}
               `;
             } else {
@@ -116,7 +116,7 @@ async function trackSwaps() {
                 Recipient: ${details.to}
                 Swap ETH: ${details.t0}
                 For N: ${details.t1}
-                Price (USD) - ## À corriger ##: ${details.price}
+                Price (USD) - ## To fix ##: ${details.price}
                 Transaction Hash: ${txHash}
               `;
             }
