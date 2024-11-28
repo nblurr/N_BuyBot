@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { ethers, JsonRpcProvider } from 'ethers';
 import { Telegraf } from 'telegraf';
+import BigNumber from 'bignumber.js';
 
 // Initialize WebSocket provider
 const provider = new ethers.WebSocketProvider(process.env.QUICKNODE_RPC_WSS);
@@ -33,6 +34,10 @@ const pool_ABI = [
 // Initialize Telegram bot
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+function flipSign(number) {
+  return -number;
+}
+
 // Track swaps
 async function trackSwaps() {
   for (const pool of POOLS) {
@@ -43,31 +48,81 @@ async function trackSwaps() {
       "Swap",
       async (sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick, event) => {
         try {
-          console.log(`
-            Swap Detected:
-            Sender: ${sender}
-            Recipient: ${recipient}
-            Amount0: ${ethers.formatUnits(amount0, 18)}
-            Amount1: ${ethers.formatUnits(amount1, 18)}
-            Price (sqrtPriceX96): ${sqrtPriceX96.toString()}
-            Liquidity: ${liquidity.toString()}
-            Tick: ${tick}
-            Transaction Hash: ${event.transactionHash}
-          `);
+          const sqrtPriceX96Big = new BigNumber(sqrtPriceX96.toString()); // Ensure it's a BigNumber
+          const Q96 = new BigNumber(2).pow(96);
+          const sqrtPrice = sqrtPriceX96Big.div(Q96); // Scale down
+          const txHash = event.log.transactionHash
+          const tx = await provider.getTransaction(txHash);
 
           const details = {
             pool,
             sender,
             recipient,
-            amountIn: ethers.formatUnits(amount0, 18),
-            amountOut: ethers.formatUnits(amount1, 18),
-            price: sqrtPriceX96.toString(),
+            t0: flipSign(ethers.formatUnits(amount0, 18)).toFixed(2),
+            t1: flipSign(ethers.formatUnits(amount1, 18)).toFixed(2),
+            price: sqrtPrice.toString(),
             liquidity: liquidity.toString(),
             tick,
-            txHash: event.transactionHash
+            txHash: txHash,
+            from: tx.from,
+            to: tx.to
           };
 
-          await postToTelegram(details);
+          console.log(details);
+
+          var $msg = '';
+
+          if(pool == "0x5121f6d8954fc6086649b826026739881a8f80c2"){
+
+            // RFD/N
+            if(details.t0>0) {
+              $msg =`
+                N/RFD
+                Sender: ${details.from}
+                Recipient: ${details.to}
+                Swap N: ${details.t1}
+                For RFD: ${details.t0}
+                Price (USD) - ## À corriger ##: ${details.price}
+                Transaction Hash: ${txHash}
+              `;
+            } else {
+              $msg =`
+                N/RFD
+                Sender: ${details.from}
+                Recipient: ${details.to}
+                Swap RFD: ${details.t0}
+                For N: ${details.t1}
+                Price (USD) - ## À corriger ##: ${details.price}
+                Transaction Hash: ${txHash}
+              `;
+            }
+
+          } else if(pool == "0x90e7a93e0a6514cb0c84fc7acc1cb5c0793352d2") {
+            // N/ETH
+            if(details.t0>0) {
+              $msg =`
+                N/ETH
+                Sender: ${details.from}
+                Recipient: ${details.to}
+                Swap N: ${details.t1}
+                For ETH: ${details.t0}
+                Price (USD) - ## À corriger ##: ${details.price}
+                Transaction Hash: ${txHash}
+              `;
+            } else {
+              $msg =`
+                N/ETH
+                Sender: ${details.from}
+                Recipient: ${details.to}
+                Swap ETH: ${details.t0}
+                For N: ${details.t1}
+                Price (USD) - ## À corriger ##: ${details.price}
+                Transaction Hash: ${txHash}
+              `;
+            }
+          }
+
+          await postToTelegram($msg);
         } catch (error) {
           console.error("Error processing Swap event:", error);
         }
@@ -77,15 +132,9 @@ async function trackSwaps() {
 }
 
 // Post swap information to Telegram
-async function postToTelegram(details) {
-  const message = `
-Pool: ${details.pool}
-💲 Spent: ${details.amountIn}
-💱 Got: ${details.amountOut} N
-💵 Transaction: [View on Etherscan](https://etherscan.io/tx/${details.txHash})
-  `;
+async function postToTelegram(msg) {
   try {
-    await bot.telegram.sendMessage(process.env.TG_CHANNEL, message);
+    await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
   } catch (error) {
     console.error("Error sending message to Telegram:", error);
   }
@@ -94,15 +143,24 @@ Pool: ${details.pool}
 // Start the bot
 (async () => {
   try {
+    bot.launch();
+
+    var msg = "Starting Telegram bot...";
+    console.log(msg);
+
+    await trackSwaps();
+
+
+    /*
     var msg = "Starting Telegram bot...";
     console.log(msg);
     await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
-    await trackSwaps();
 
-    bot.launch();
     msg = "Bot is live!";
     console.log(msg);
     await bot.telegram.sendMessage(process.env.TG_CHANNEL, msg);
+    */
+
   } catch (error) {
     console.error("Error starting bot:", error);
   }
